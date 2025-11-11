@@ -18,6 +18,9 @@ npm run start       # Start production server
 
 # Code Quality
 npm run lint        # Run ESLint for code quality checks
+
+# Installation (use legacy peer deps for dependency conflicts)
+npm install --legacy-peer-deps
 ```
 
 ## Architecture Overview
@@ -44,6 +47,7 @@ npm run lint        # Run ESLint for code quality checks
 - **Main Page Structure**: Single-page application with all sections in `app/page.tsx`
 - **Client Components**: Marked with `"use client"` directive
 - **Type Safety**: Full TypeScript interfaces for all props
+- **UI Library**: Complete Shadcn/UI component library (45+ components) in `components/ui/`
 
 ### Design System
 - **Color Palette**: Gold-themed neutral colors with dark mode support
@@ -66,12 +70,31 @@ npm run lint        # Run ESLint for code quality checks
 - Utility-first Tailwind CSS with custom theme
 - Styled-jsx for component-specific animations
 - CSS variables for consistent theming
+- **cn() utility**: Combines clsx and tailwind-merge for className optimization
+
+## Configuration Details
+
+### Next.js Configuration (next.config.mjs)
+- TypeScript build errors are ignored (`typescript: { ignoreBuildErrors: true }`)
+- Image optimization disabled (`images: { unoptimized: true }`)
+- Vercel Analytics integrated in root layout
+
+### Tailwind CSS v4 Setup
+- Uses `@import "tailwindcss"` with new v4 syntax in `app/globals.css`
+- Custom CSS variables for design tokens (gold/neutral color theme)
+- `@theme inline` directive for theme configuration
+- Dark mode support with custom variant
+
+### Component Patterns
+- **Class Variance Authority (CVA)**: For component variants (buttons, etc.)
+- **Radix UI Primitives**: For accessible component foundations
+- **Lucide React**: Consistent icon system
+- **React Hook Form + Zod**: Form handling and validation infrastructure
 
 ## Development Notes
 
-- Uses pnpm as package manager (pnpm-lock.yaml present)
-- ESLint configured for code quality
-- TypeScript build errors are ignored in config (typescript: { ignoreBuildErrors: true })
-- Image optimization disabled in Next.js config (images: { unoptimized: true })
-- No testing framework currently configured
-- No git repository initialized yet
+- **Package Manager**: pnpm recommended (package-lock.json also present)
+- **Installation**: Use `npm install --legacy-peer-deps` for dependency conflicts
+- **ESLint**: Configured for code quality
+- **Testing**: No testing framework currently configured
+- **Git Repository**: Initialized and ready for development
