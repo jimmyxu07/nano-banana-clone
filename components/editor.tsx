@@ -4,21 +4,68 @@ import type React from "react"
 
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { ImageIcon } from "lucide-react"
+import { ImageIcon, Loader2, Download } from "lucide-react"
 
 export default function Editor() {
   const [image, setImage] = useState<string | null>(null)
   const [prompt, setPrompt] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null)
+  const [generatedText, setGeneratedText] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Parse AI response to extract image and text
+  const parseAIResponse = (response: string) => {
+    // Look for markdown image syntax: ![alt](data:image/...)
+    const imageRegex = /!\[.*?\]\(data:image\/[^)]+\)/g
+    const imageMatches = response.match(imageRegex)
+
+    if (imageMatches && imageMatches.length > 0) {
+      // Extract the data URL from the first match
+      const dataUrlMatch = imageMatches[0].match(/\(data:image\/[^)]+\)/)
+      if (dataUrlMatch) {
+        const imageUrl = dataUrlMatch[0].slice(1, -1) // Remove parentheses
+        const textWithoutImage = response.replace(imageRegex, '').trim()
+
+        return {
+          image: imageUrl,
+          text: textWithoutImage || null
+        }
+      }
+    }
+
+    // If no image found, treat the whole response as text
+    return {
+      image: null,
+      text: response
+    }
+  }
+
+  const downloadImage = (imageUrl: string, filename: string = 'generated-image.png') => {
+    try {
+      const link = document.createElement('a')
+      link.href = imageUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      console.error('Error downloading image:', error)
+    }
+  }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      setImageFile(file)
       const reader = new FileReader()
       reader.onload = (event) => {
         setImage(event.target?.result as string)
       }
       reader.readAsDataURL(file)
+      setError(null)
     }
   }
 
@@ -33,11 +80,54 @@ export default function Editor() {
     const files = e.dataTransfer.files
     if (files.length > 0) {
       const file = files[0]
+      setImageFile(file)
       const reader = new FileReader()
       reader.onload = (event) => {
         setImage(event.target?.result as string)
       }
       reader.readAsDataURL(file)
+      setError(null)
+    }
+  }
+
+  const handleGenerate = async () => {
+    if (!imageFile || !prompt.trim()) {
+      setError('Please upload an image and enter a prompt')
+      return
+    }
+
+    setIsGenerating(true)
+    setError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('image', imageFile)
+      formData.append('prompt', prompt.trim())
+
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || 'Failed to generate image')
+      }
+
+      if (result.success) {
+        // Parse the AI response to extract image and text
+        const parsedResponse = parseAIResponse(result.response)
+        setGeneratedImage(parsedResponse.image)
+        setGeneratedText(parsedResponse.text)
+      } else {
+        throw new Error('Failed to generate image')
+      }
+    } catch (err) {
+      console.error('Generation error:', err)
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -105,8 +195,26 @@ export default function Editor() {
               />
             </div>
 
-            <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg font-semibold">
-              Generate Now
+            {/* Error Display */}
+            {error && (
+              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-sm text-destructive">{error}</p>
+              </div>
+            )}
+
+            <Button
+              onClick={handleGenerate}
+              disabled={!imageFile || !prompt.trim() || isGenerating}
+              className="w-full bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg font-semibold"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                'Generate Now'
+              )}
             </Button>
           </div>
 
@@ -117,10 +225,72 @@ export default function Editor() {
             </div>
             <p className="text-sm text-muted-foreground mb-6">Your ultra-fast AI creations appear here instantly</p>
 
-            <div className="flex flex-col items-center justify-center h-64 bg-yellow-50 rounded-lg border border-dashed border-yellow-200">
-              <ImageIcon className="w-16 h-16 text-yellow-300 mb-3 opacity-50" />
-              <p className="font-semibold text-foreground mb-1">Ready for instant generation</p>
-              <p className="text-sm text-muted-foreground text-center">Enter your prompt and unleash the power</p>
+            <div className="min-h-64">
+              {isGenerating ? (
+                <div className="flex flex-col items-center justify-center h-64 bg-yellow-50 rounded-lg border border-dashed border-yellow-200">
+                  <Loader2 className="w-16 h-16 text-yellow-400 mb-3 animate-spin" />
+                  <p className="font-semibold text-foreground mb-1">Processing your image...</p>
+                  <p className="text-sm text-muted-foreground text-center">AI is working its magic</p>
+                </div>
+              ) : (generatedImage || generatedText) ? (
+                <div className="space-y-4">
+                  {generatedImage && (
+                    <div className="p-4 bg-muted/50 rounded-lg border">
+                      <h4 className="font-semibold text-foreground mb-2">Generated Image:</h4>
+                      <img
+                        src={generatedImage}
+                        alt="AI generated image"
+                        className="w-full rounded-lg max-h-96 object-contain"
+                      />
+                    </div>
+                  )}
+                  {generatedText && (
+                    <div className="p-4 bg-muted/50 rounded-lg border">
+                      <h4 className="font-semibold text-foreground mb-2">AI Response:</h4>
+                      <p className="text-sm text-foreground whitespace-pre-wrap">{generatedText}</p>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setGeneratedImage(null)
+                        setGeneratedText(null)
+                      }}
+                    >
+                      Clear Result
+                    </Button>
+                    {generatedText && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedText)
+                        }}
+                      >
+                        Copy Text
+                      </Button>
+                    )}
+                    {generatedImage && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => downloadImage(generatedImage, 'nano-banana-generated.png')}
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Download Image
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-64 bg-yellow-50 rounded-lg border border-dashed border-yellow-200">
+                  <ImageIcon className="w-16 h-16 text-yellow-300 mb-3 opacity-50" />
+                  <p className="font-semibold text-foreground mb-1">Ready for instant generation</p>
+                  <p className="text-sm text-muted-foreground text-center">Upload an image and enter your prompt</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
